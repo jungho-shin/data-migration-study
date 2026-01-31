@@ -16,8 +16,8 @@ from datetime import datetime
 from csv_to_json import CSVToJSONConverter
 
 app = FastAPI(
-    title="CSV to JSON Converter API",
-    description="CSV 파일을 JSON 형식으로 변환하는 웹서비스",
+    title="CSV to JSONL Converter API",
+    description="CSV 파일을 JSONL(JSON Lines) 형식으로 변환하는 웹서비스",
     version="1.0.0"
 )
 
@@ -42,7 +42,7 @@ class ConvertRequest(BaseModel):
     input_dir: str = Field(default=DEFAULT_INPUT_DIR, description="입력 CSV 파일 디렉토리")
     output_dir: str = Field(default=DEFAULT_OUTPUT_DIR, description="출력 JSON 파일 디렉토리")
     backup_dir: str = Field(default=DEFAULT_BACKUP_DIR, description="백업 디렉토리")
-    format_type: str = Field(default="array", description="JSON 형식 (array 또는 objects)")
+    format_type: str = Field(default="jsonl", description="출력 형식 (기본: jsonl)")
     chunk_size: Optional[int] = Field(default=None, description="청크 크기 (대용량 파일 분할)")
     files: Optional[List[str]] = Field(default=None, description="변환할 파일 목록 (None이면 전체)")
     pattern: str = Field(default="*.csv", description="파일 패턴")
@@ -315,16 +315,9 @@ async def root():
             
             <form id="convertForm">
                 <div class="form-group">
-                    <label for="format_type">JSON 형식:</label>
-                    <select id="format_type" name="format_type">
-                        <option value="array">Array 형식 [{row1}, {row2}, ...]</option>
-                        <option value="objects">Objects 형식 {"rows": [...], "count": N}</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
                     <label for="chunk_size">청크 크기 (선택, 대용량 파일 분할용):</label>
                     <input type="number" id="chunk_size" name="chunk_size" min="1" placeholder="비워두면 전체 변환">
+                    <small style="color: #666; display: block; margin-top: 5px;">각 CSV 행이 JSONL 형식(한 줄에 하나의 JSON 객체)으로 변환됩니다.</small>
                 </div>
                 
                 <button type="submit">선택한 파일 변환 시작</button>
@@ -435,7 +428,7 @@ async def root():
                 
                 const formData = new FormData(e.target);
                 const data = {
-                    format_type: formData.get('format_type'),
+                    format_type: "jsonl",  // JSONL 형식으로 고정
                     files: selectedFiles
                 };
                 
@@ -603,7 +596,7 @@ async def list_files(input_dir: str = DEFAULT_INPUT_DIR, output_dir: str = DEFAU
         csv_files = sorted([f.name for f in input_path.glob("*.csv")])
     
     if output_path.exists():
-        json_files = sorted([f.name for f in output_path.glob("*.json")])
+        json_files = sorted([f.name for f in output_path.glob("*.jsonl")])
     
     return {
         "input_dir": str(input_dir),

@@ -72,14 +72,14 @@ class CSVToJSONConverter:
             return False
     
     def convert_file(self, csv_file: Path, output_file: Optional[Path] = None, 
-                    format_type: str = "array", chunk_size: Optional[int] = None) -> Dict[str, Any]:
+                    format_type: str = "jsonl", chunk_size: Optional[int] = None) -> Dict[str, Any]:
         """
-        단일 CSV 파일을 JSON으로 변환
+        단일 CSV 파일을 JSONL(JSON Lines) 형식으로 변환
         
         Args:
             csv_file: 변환할 CSV 파일 경로
-            output_file: 출력 JSON 파일 경로 (None이면 자동 생성)
-            format_type: JSON 형식 ("array" 또는 "objects")
+            output_file: 출력 JSONL 파일 경로 (None이면 자동 생성)
+            format_type: 형식 (기본: "jsonl", 하위 호환성을 위해 유지)
             chunk_size: 청크 크기 (None이면 전체 변환)
         
         Returns:
@@ -89,74 +89,70 @@ class CSVToJSONConverter:
             raise FileNotFoundError(f"CSV 파일을 찾을 수 없습니다: {csv_file}")
         
         if output_file is None:
-            output_file = self.output_dir / f"{csv_file.stem}.json"
+            output_file = self.output_dir / f"{csv_file.stem}.jsonl"
         
         try:
             with open(csv_file, 'r', encoding='utf-8') as f:
                 # CSV 파일 읽기
                 reader = csv.DictReader(f)
                 
-                if format_type == "array":
-                    # 배열 형식: [{row1}, {row2}, ...]
-                    data = list(reader)
+                if chunk_size:
+                    # 청크 단위로 저장
+                    saved_files = []
+                    chunk_data = []
+                    chunk_num = 1
+                    total_rows = 0
                     
-                    if chunk_size:
-                        # 청크 단위로 저장
-                        total_chunks = (len(data) + chunk_size - 1) // chunk_size
-                        saved_files = []
+                    for row in reader:
+                        chunk_data.append(row)
+                        total_rows += 1
                         
-                        for i in range(0, len(data), chunk_size):
-                            chunk = data[i:i + chunk_size]
-                            chunk_file = self.output_dir / f"{csv_file.stem}_chunk_{i // chunk_size + 1}.json"
-                            
+                        if len(chunk_data) >= chunk_size:
+                            chunk_file = self.output_dir / f"{csv_file.stem}_chunk_{chunk_num}.jsonl"
                             with open(chunk_file, 'w', encoding='utf-8') as out_f:
-                                json.dump(chunk, out_f, ensure_ascii=False, indent=2)
+                                for data_row in chunk_data:
+                                    json_line = json.dumps(data_row, ensure_ascii=False)
+                                    out_f.write(json_line + '\n')
                             
                             saved_files.append(chunk_file.name)
-                        
-                        return {
-                            "success": True,
-                            "input_file": csv_file.name,
-                            "output_files": saved_files,
-                            "total_rows": len(data),
-                            "total_chunks": total_chunks,
-                            "format": format_type
-                        }
-                    else:
-                        # 전체 파일 저장
-                        with open(output_file, 'w', encoding='utf-8') as out_f:
-                            json.dump(data, out_f, ensure_ascii=False, indent=2)
-                        
-                        return {
-                            "success": True,
-                            "input_file": csv_file.name,
-                            "output_file": output_file.name,
-                            "total_rows": len(data),
-                            "format": format_type
-                        }
-                
-                elif format_type == "objects":
-                    # 객체 형식: {"rows": [{row1}, {row2}, ...], "count": N}
-                    data = list(reader)
-                    result = {
-                        "rows": data,
-                        "count": len(data),
-                        "columns": list(data[0].keys()) if data else []
-                    }
+                            chunk_data = []
+                            chunk_num += 1
                     
+                    # 남은 데이터 저장
+                    if chunk_data:
+                        chunk_file = self.output_dir / f"{csv_file.stem}_chunk_{chunk_num}.jsonl"
+                        with open(chunk_file, 'w', encoding='utf-8') as out_f:
+                            for data_row in chunk_data:
+                                json_line = json.dumps(data_row, ensure_ascii=False)
+                                out_f.write(json_line + '\n')
+                        saved_files.append(chunk_file.name)
+                    
+                    total_chunks = len(saved_files)
+                    
+                    return {
+                        "success": True,
+                        "input_file": csv_file.name,
+                        "output_files": saved_files,
+                        "total_rows": total_rows,
+                        "total_chunks": total_chunks,
+                        "format": "jsonl"
+                    }
+                else:
+                    # 전체 파일을 JSONL 형식으로 저장
+                    row_count = 0
                     with open(output_file, 'w', encoding='utf-8') as out_f:
-                        json.dump(result, out_f, ensure_ascii=False, indent=2)
+                        for row in reader:
+                            json_line = json.dumps(row, ensure_ascii=False)
+                            out_f.write(json_line + '\n')
+                            row_count += 1
                     
                     return {
                         "success": True,
                         "input_file": csv_file.name,
                         "output_file": output_file.name,
-                        "total_rows": len(data),
-                        "format": format_type
+                        "total_rows": row_count,
+                        "format": "jsonl"
                     }
-                
-                else:
-                    raise ValueError(f"지원하지 않는 형식: {format_type}")
         
         except Exception as e:
             return {
@@ -165,13 +161,13 @@ class CSVToJSONConverter:
                 "error": str(e)
             }
     
-    def convert_all(self, format_type: str = "array", chunk_size: Optional[int] = None,
+    def convert_all(self, format_type: str = "jsonl", chunk_size: Optional[int] = None,
                    pattern: str = "*.csv", move_to_backup: bool = True) -> Dict[str, Any]:
         """
-        디렉토리 내 모든 CSV 파일 변환
+        디렉토리 내 모든 CSV 파일을 JSONL 형식으로 변환
         
         Args:
-            format_type: JSON 형식 ("array" 또는 "objects")
+            format_type: 형식 (기본: "jsonl", 하위 호환성을 위해 유지)
             chunk_size: 청크 크기 (None이면 전체 변환)
             pattern: 파일 패턴 (기본: "*.csv")
             move_to_backup: 변환 완료 후 백업 디렉토리로 이동 여부
@@ -222,14 +218,13 @@ class CSVToJSONConverter:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='CSV to JSON Converter')
+    parser = argparse.ArgumentParser(description='CSV to JSONL Converter')
     parser.add_argument('--input-dir', type=str, default='../data',
                        help='입력 CSV 파일 디렉토리 (기본: ../data)')
     parser.add_argument('--output-dir', type=str, default='../data_json',
-                       help='출력 JSON 파일 디렉토리 (기본: ../data_json)')
-    parser.add_argument('--format', type=str, default='array',
-                       choices=['array', 'objects'],
-                       help='JSON 형식 (기본: array)')
+                       help='출력 JSONL 파일 디렉토리 (기본: ../data_json)')
+    parser.add_argument('--format', type=str, default='jsonl',
+                       help='출력 형식 (기본: jsonl)')
     parser.add_argument('--chunk-size', type=int, default=None,
                        help='청크 크기 (대용량 파일 분할)')
     parser.add_argument('--file', type=str, default=None,
