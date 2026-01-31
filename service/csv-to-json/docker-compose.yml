@@ -1,0 +1,18 @@
+services:
+  csv-to-json:
+    build: .
+    container_name: csv-to-json
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../data:/app/data
+      - ../data_json:/app/data_json
+      - ../data_csv_bk:/app/data_csv_bk
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
