@@ -29,7 +29,9 @@ job_status = {}
 job_results = {}
 
 # 기본 설정
-DEFAULT_OUTPUT_DIR = "./data"
+# Docker 컨테이너 내부에서는 /app/data 사용, 로컬에서는 ../data 사용
+import os
+DEFAULT_OUTPUT_DIR = "/app/data" if os.path.exists("/app/data") else "../data"
 DEFAULT_MAX_SIZE_GB = 10.0
 
 

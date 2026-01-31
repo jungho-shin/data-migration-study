@@ -27,12 +27,16 @@ class NYCTaxiDataCollector:
         'fhvhv': 'fhvhv_tripdata'
     }
     
-    def __init__(self, output_dir='./data', max_size_gb=10):
+    def __init__(self, output_dir=None, max_size_gb=10):
         """
         Args:
-            output_dir: 데이터 저장 디렉토리
+            output_dir: 데이터 저장 디렉토리 (None이면 자동 감지)
             max_size_gb: 최대 수집 크기 (GB)
         """
+        import os
+        if output_dir is None:
+            # Docker 컨테이너 내부에서는 /app/data, 로컬에서는 ../data
+            output_dir = "/app/data" if os.path.exists("/app/data") else "../data"
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.max_size_gb = max_size_gb
