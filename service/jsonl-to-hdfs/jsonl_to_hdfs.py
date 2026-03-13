@@ -51,6 +51,9 @@ class JSONLToHDFSConverter:
                 .config("spark.network.timeout", "600s") \
                 .config("spark.executor.heartbeatInterval", "60s") \
                 .config("spark.sql.execution.arrow.pyspark.enabled", "false") \
+                .config("spark.driver.memory", "2g") \
+                .config("spark.executor.memory", "2g") \
+                .config("spark.driver.maxResultSize", "1g") \
                 .getOrCreate()
             
             return spark
@@ -88,38 +91,29 @@ class JSONLToHDFSConverter:
             
             print(f"JSONL 파일 읽기: {jsonl_file}")
             
-            # Spark Worker가 파일에 접근할 수 없으므로, 파일을 직접 읽어서 DataFrame 생성
-            import json
-            from pyspark.sql.types import StructType
-            from pyspark.sql import Row
+            # 파일을 먼저 HDFS에 업로드한 후 Spark로 읽기
+            # 임시 HDFS 경로
+            temp_hdfs_path = f"{self.hdfs_path}/_temp/{jsonl_file.name}"
             
-            # JSONL 파일을 직접 읽기
-            rows = []
-            with open(jsonl_file, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    if line:
-                        try:
-                            data = json.loads(line)
-                            rows.append(Row(**data))
-                        except json.JSONDecodeError as e:
-                            print(f"Warning: Line {line_num} JSON 파싱 오류: {e}")
-                            continue
+            # HDFS에 파일 업로드
+            print(f"HDFS에 임시 업로드 중: {temp_hdfs_path}")
+            hadoop_fs = spark.sparkContext._jvm.org.apache.hadoop.fs.FileSystem.get(
+                spark.sparkContext._jsc.hadoopConfiguration()
+            )
+            hdfs_path_obj = spark.sparkContext._jvm.org.apache.hadoop.fs.Path(temp_hdfs_path)
+            local_path_obj = spark.sparkContext._jvm.org.apache.hadoop.fs.Path(str(jsonl_file.resolve()))
             
-            if not rows:
-                return {
-                    "success": False,
-                    "input_file": jsonl_file.name,
-                    "error": "유효한 JSON 데이터가 없습니다."
-                }
+            # HDFS 디렉토리 생성
+            hdfs_dir = hdfs_path_obj.getParent()
+            if not hadoop_fs.exists(hdfs_dir):
+                hadoop_fs.mkdirs(hdfs_dir)
             
-            # 첫 번째 행으로 스키마 추론
-            first_row = rows[0]
-            schema = None  # 스키마 자동 추론
+            # 파일 복사
+            hadoop_fs.copyFromLocalFile(local_path_obj, hdfs_path_obj)
+            print(f"임시 업로드 완료: {temp_hdfs_path}")
             
-            # RDD로 변환 후 DataFrame 생성
-            rdd = spark.sparkContext.parallelize(rows)
-            df = spark.createDataFrame(rdd, schema=schema)
+            # HDFS에서 JSONL 파일 읽기
+            df = spark.read.json(temp_hdfs_path, multiLine=False)
             
             row_count = df.count()
             print(f"읽은 행 수: {row_count}")
@@ -129,6 +123,13 @@ class JSONLToHDFSConverter:
             df.write.mode("overwrite").parquet(hdfs_output_path)
             
             print(f"저장 완료: {hdfs_output_path}")
+            
+            # 임시 파일 삭제
+            try:
+                hadoop_fs.delete(hdfs_path_obj, True)
+                print(f"임시 파일 삭제 완료: {temp_hdfs_path}")
+            except Exception as e:
+                print(f"임시 파일 삭제 실패 (무시): {e}")
             
             spark.stop()
             
