@@ -118,9 +118,9 @@ class JSONLToHDFSConverter:
             row_count = df.count()
             print(f"읽은 행 수: {row_count}")
             
-            # HDFS에 Parquet 형식으로 저장
+            # HDFS에 JSONL 형식으로 저장
             print(f"HDFS에 저장 중: {hdfs_output_path}")
-            df.write.mode("overwrite").parquet(hdfs_output_path)
+            df.write.mode("overwrite").json(hdfs_output_path)
             
             print(f"저장 완료: {hdfs_output_path}")
             
@@ -138,7 +138,7 @@ class JSONLToHDFSConverter:
                 "input_file": jsonl_file.name,
                 "hdfs_path": hdfs_output_path,
                 "total_rows": row_count,
-                "format": "parquet"
+                "format": "jsonl"
             }
             
         except Exception as e:
