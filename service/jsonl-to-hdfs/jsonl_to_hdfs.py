@@ -88,8 +88,13 @@ class JSONLToHDFSConverter:
             
             print(f"JSONL 파일 읽기: {jsonl_file}")
             
+            # 로컬 파일 경로를 명시적으로 지정 (file:// 프로토콜 사용)
+            local_file_path = str(jsonl_file.resolve())
+            if not local_file_path.startswith("file://"):
+                local_file_path = f"file://{local_file_path}"
+            
             # JSONL 파일 읽기 (각 줄이 JSON 객체)
-            df = spark.read.json(str(jsonl_file), multiLine=False)
+            df = spark.read.json(local_file_path, multiLine=False)
             
             row_count = df.count()
             print(f"읽은 행 수: {row_count}")
