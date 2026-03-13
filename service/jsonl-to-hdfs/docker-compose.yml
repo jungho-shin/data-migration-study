@@ -1,0 +1,28 @@
+services:
+  jsonl-to-hdfs:
+    build: .
+    container_name: jsonl-to-hdfs
+    ports:
+      - "8002:8002"
+    volumes:
+      - ../data_json:/app/data_json
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SPARK_MASTER=spark://spark-master:7077
+      - HDFS_NAMENODE=namenode:9000
+    depends_on:
+      - spark-master
+      - namenode
+    networks:
+      - data-migration-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  data-migration-network:
+    external: true
+    name: root_data-migration-network
