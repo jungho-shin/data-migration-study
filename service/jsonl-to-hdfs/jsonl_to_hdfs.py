@@ -28,6 +28,19 @@ class JSONLToHDFSConverter:
         """Spark 세션 생성"""
         try:
             from pyspark.sql import SparkSession
+            import time
+            
+            # 기존 SparkContext가 있으면 정리
+            try:
+                from pyspark import SparkContext
+                sc = SparkContext._active_spark_context
+                if sc is not None:
+                    sc.stop()
+            except:
+                pass
+            
+            # 잠시 대기 (SparkContext 정리 시간)
+            time.sleep(1)
             
             spark = SparkSession.builder \
                 .appName("JSONLToHDFS") \
@@ -35,12 +48,17 @@ class JSONLToHDFSConverter:
                 .config("spark.sql.warehouse.dir", "/tmp/spark-warehouse") \
                 .config("spark.hadoop.fs.defaultFS", "hdfs://namenode:9000") \
                 .config("spark.hadoop.dfs.client.use.datanode.hostname", "true") \
+                .config("spark.network.timeout", "600s") \
+                .config("spark.executor.heartbeatInterval", "60s") \
+                .config("spark.sql.execution.arrow.pyspark.enabled", "false") \
                 .getOrCreate()
             
             return spark
         except ImportError:
             raise ImportError("pyspark가 설치되지 않았습니다. pip install pyspark로 설치하세요.")
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             raise Exception(f"Spark 세션 생성 실패: {str(e)}")
     
     def upload_file(self, jsonl_file: Path, hdfs_output_path: Optional[str] = None) -> Dict[str, Any]:
