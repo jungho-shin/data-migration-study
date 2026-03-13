@@ -10,9 +10,6 @@ services:
       - PYTHONUNBUFFERED=1
       - SPARK_MASTER=spark://spark-master:7077
       - HDFS_NAMENODE=namenode:9000
-    depends_on:
-      - spark-master
-      - namenode
     networks:
       - data-migration-network
     restart: unless-stopped
