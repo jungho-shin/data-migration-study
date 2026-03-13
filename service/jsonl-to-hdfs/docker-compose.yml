@@ -22,4 +22,4 @@ services:
 networks:
   data-migration-network:
     external: true
-    name: root_data-migration-network
+    name: infra_data-migration-network
