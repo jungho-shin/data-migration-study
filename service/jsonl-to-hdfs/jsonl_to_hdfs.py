@@ -88,13 +88,38 @@ class JSONLToHDFSConverter:
             
             print(f"JSONL 파일 읽기: {jsonl_file}")
             
-            # 로컬 파일 경로를 명시적으로 지정 (file:// 프로토콜 사용)
-            local_file_path = str(jsonl_file.resolve())
-            if not local_file_path.startswith("file://"):
-                local_file_path = f"file://{local_file_path}"
+            # Spark Worker가 파일에 접근할 수 없으므로, 파일을 직접 읽어서 DataFrame 생성
+            import json
+            from pyspark.sql.types import StructType
+            from pyspark.sql import Row
             
-            # JSONL 파일 읽기 (각 줄이 JSON 객체)
-            df = spark.read.json(local_file_path, multiLine=False)
+            # JSONL 파일을 직접 읽기
+            rows = []
+            with open(jsonl_file, 'r', encoding='utf-8') as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if line:
+                        try:
+                            data = json.loads(line)
+                            rows.append(Row(**data))
+                        except json.JSONDecodeError as e:
+                            print(f"Warning: Line {line_num} JSON 파싱 오류: {e}")
+                            continue
+            
+            if not rows:
+                return {
+                    "success": False,
+                    "input_file": jsonl_file.name,
+                    "error": "유효한 JSON 데이터가 없습니다."
+                }
+            
+            # 첫 번째 행으로 스키마 추론
+            first_row = rows[0]
+            schema = None  # 스키마 자동 추론
+            
+            # RDD로 변환 후 DataFrame 생성
+            rdd = spark.sparkContext.parallelize(rows)
+            df = spark.createDataFrame(rdd, schema=schema)
             
             row_count = df.count()
             print(f"읽은 행 수: {row_count}")
