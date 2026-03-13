@@ -5,11 +5,11 @@ WORKDIR /app
 # 시스템 패키지 설치
 RUN apt-get update && apt-get install -y \
     curl \
-    openjdk-11-jdk \
+    default-jdk \
     && rm -rf /var/lib/apt/lists/*
 
 # Java 환경 변수 설정
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/default-java
 ENV PATH=$PATH:$JAVA_HOME/bin
 
 # Python 의존성 복사 및 설치
